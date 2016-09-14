@@ -22,6 +22,14 @@ enum NCPS1pin{none1, PA9,	PA31,	PB14,	PC4};
 enum NCPS2pin{none2, PA10,	PA30,	PB2};
 enum NCPS3pin{none3, PA3,	PA5,	PA22};
 	
+	
+enum SpiChipSelect{
+	NPCS0 = 0,
+	NPCS1,
+	NPCS2,
+	NPCS3,
+};
+
 struct SpiMaster {
 	uint8_t NVIC_spi_interrupt_priority; // must be >= 5
 	enum NCPS0pin cs_0;
@@ -29,8 +37,8 @@ struct SpiMaster {
 	enum NCPS2pin cs_2;
 	enum NCPS3pin cs_3;
 };
-struct SpiDevice {
-	uint8_t chip_select;
+struct SpiSlaveSettings {
+	enum SpiChipSelect chip_select;
 	uint32_t peripheral_clock_hz;
 	/*Specify Mode 0..3. Specified in datasheet at 35.7.2 */
 	enum SpiMode spi_mode;
@@ -46,7 +54,7 @@ struct SpiDevice {
 	};
 	
 void spi_masterInit(struct SpiMaster SpiSettings );
-void spi_deviceInit(struct SpiDevice SpiDeviceSettings);
+void spi_chipSelectInit(struct SpiSlaveSettings SpiCsSettings);
 
 
 void spi_freeRTOSTranceive(uint32_t  *transmit_buffer, uint8_t buffer_length, void (*callBackFunc)(void), uint32_t *receive_buffer);

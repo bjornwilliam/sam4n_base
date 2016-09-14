@@ -8,10 +8,12 @@ SemaphoreHandle_t spi_handlerIsDoneSempahore = NULL;
 SemaphoreHandle_t spi_mutex = NULL;
 
 static void spi_tranceive(uint32_t *transmit_buffer, uint8_t buffer_length, uint32_t *receive_buffer ) {
+	SPI->SPI_CR = 1 << 0;
 	SPI->SPI_TPR = transmit_buffer; // Give address to tdr register
 	SPI->SPI_TCR = buffer_length;  // Give it length of transmit buffer
 	SPI->SPI_RPR = receive_buffer; // Give address to rpr register
 	SPI->SPI_RCR = buffer_length; // Give it length of receive buffer
+	NVIC_EnableIRQ(SPI_IRQn);
 }
 
 void spi_freeRTOSTranceive(uint32_t  *transmit_buffer, uint8_t buffer_length, void (*callBackFunc)(void), uint32_t *receive_buffer ) {
@@ -36,6 +38,9 @@ void SPI_Handler(void) {
 		xSemaphoreGiveFromISR(spi_handlerIsDoneSempahore,&lHigherPriorityTaskWoken);
 	}
 	portEND_SWITCHING_ISR(lHigherPriorityTaskWoken);
+	SPI->SPI_CR = 1 << 1;
+	NVIC_DisableIRQ(SPI_IRQn);
+	
 }
 
 uint32_t spi_word(bool last_xfer,uint8_t chip_select, uint16_t data) {
@@ -140,39 +145,41 @@ void spi_masterInit(struct SpiMaster SpiSettings) {
 	NVIC_SetPriority(SPI_IRQn,SpiSettings.NVIC_spi_interrupt_priority);
 	NVIC_EnableIRQ(SPI_IRQn);
 	
+	pmc_enable_periph_clk(SPI_IRQn); // Enable Spi clock
 	spi_setupMux(SpiSettings);
-	pmc_enable_periph_clk(19); // Enable Spi clock
+	
 	SPI->SPI_CR |= SPI_CR_SPIEN; // Enable SPI
 	SPI->SPI_MR |= SPI_MR_MSTR; // Set Master Mode
 	SPI->SPI_MR &= ~(1<<2); // Disable Chip select decode
-	SPI->SPI_MR |= 1<<1; // Variable peripheral select
+	SPI->SPI_MR |= (1<<1); // Variable peripheral select
 	SPI->SPI_MR &= ~(1<<4); // Disable mode fault detection
 	
-	SPI->SPI_IER |= 1<<8;  // NSSR interrupt enabled ( Chip select rising )
+
+	SPI->SPI_IER  |= 1<<9;  // TXEMPTY Interrupt
 	SPI->SPI_PTCR |= 1<<8; // Enable PDC transmit
 	SPI->SPI_PTCR |= 1<<0; // Enable PDC receive
 }
-void spi_deviceInit(struct SpiDevice SpiDeviceSettings) {
-	spi_setBaudRateHz(SpiDeviceSettings.peripheral_clock_hz,SpiDeviceSettings.spi_baudRate_hz,SpiDeviceSettings.chip_select);
-	switch (SpiDeviceSettings.spi_mode) {
+void spi_chipSelectInit(struct SpiSlaveSettings SpiCsSettings) {
+	spi_setBaudRateHz(SpiCsSettings.peripheral_clock_hz,SpiCsSettings.spi_baudRate_hz,SpiCsSettings.chip_select);
+	switch (SpiCsSettings.spi_mode) {
 		case MODE_0:
-		SPI->SPI_CSR[SpiDeviceSettings.chip_select] &= ~(1<<0);
-		SPI->SPI_CSR[SpiDeviceSettings.chip_select] |= (1<<1);
+		SPI->SPI_CSR[SpiCsSettings.chip_select] &= ~(1<<0);
+		SPI->SPI_CSR[SpiCsSettings.chip_select] |= (1<<1);
 		break;
 		case MODE_1:
-		SPI->SPI_CSR[SpiDeviceSettings.chip_select] &= ~(1<<0);
-		SPI->SPI_CSR[SpiDeviceSettings.chip_select] &=  ~(1<<1);
+		SPI->SPI_CSR[SpiCsSettings.chip_select] &= ~(1<<0);
+		SPI->SPI_CSR[SpiCsSettings.chip_select] &=  ~(1<<1);
 		break;
 		case MODE_2:
-		SPI->SPI_CSR[SpiDeviceSettings.chip_select] |= (1<<0);
-		SPI->SPI_CSR[SpiDeviceSettings.chip_select] |= (1<<1);
+		SPI->SPI_CSR[SpiCsSettings.chip_select] |= (1<<0);
+		SPI->SPI_CSR[SpiCsSettings.chip_select] |= (1<<1);
 		break;
 		case MODE_3:
-		SPI->SPI_CSR[SpiDeviceSettings.chip_select] |= (1<<0);
-		SPI->SPI_CSR[SpiDeviceSettings.chip_select] &= ~(1<<1);
+		SPI->SPI_CSR[SpiCsSettings.chip_select] |= (1<<0);
+		SPI->SPI_CSR[SpiCsSettings.chip_select] &= ~(1<<1);
 		break;
 	}
-	SPI->SPI_CSR[SpiDeviceSettings.chip_select] |= (SpiDeviceSettings.bits_per_transfer-8) << 4;
-	SPI->SPI_CSR[SpiDeviceSettings.chip_select] |= SpiDeviceSettings.time_until_first_valid_SPCK << 16;
-	SPI->SPI_CSR[SpiDeviceSettings.chip_select] |= SpiDeviceSettings.delay_between_two_consecutive_transfers << 24;
+	SPI->SPI_CSR[SpiCsSettings.chip_select] |= (SpiCsSettings.bits_per_transfer-8) << 4;
+	SPI->SPI_CSR[SpiCsSettings.chip_select] |= SpiCsSettings.time_until_first_valid_SPCK << 16;
+	SPI->SPI_CSR[SpiCsSettings.chip_select] |= SpiCsSettings.delay_between_two_consecutive_transfers << 24;
 }
