@@ -8,16 +8,20 @@ SemaphoreHandle_t spi_handlerIsDoneSempahore = NULL;
 SemaphoreHandle_t spi_mutex = NULL;
 
 static void spi_tranceive(uint32_t *transmit_buffer, uint8_t buffer_length, uint32_t *receive_buffer ) {
-	SPI->SPI_CR = 1 << 0;
+	NVIC_EnableIRQ(SPI_IRQn);
+	SPI->SPI_CR = 1 << 0;	
+	//xSemaphoreTake(spi_handlerIsDoneSempahore, portMAX_DELAY);
 	SPI->SPI_TPR = transmit_buffer; // Give address to tdr register
 	SPI->SPI_TCR = buffer_length;  // Give it length of transmit buffer
 	SPI->SPI_RPR = receive_buffer; // Give address to rpr register
 	SPI->SPI_RCR = buffer_length; // Give it length of receive buffer
-	NVIC_EnableIRQ(SPI_IRQn);
+	SPI->SPI_PTCR |= 1<<8; // Enable PDC transmit
+	SPI->SPI_PTCR |= 1<<0; // Enable PDC receive
+	
 }
 
 void spi_freeRTOSTranceive(uint32_t  *transmit_buffer, uint8_t buffer_length, void (*callBackFunc)(void), uint32_t *receive_buffer ) {
-	//Aquire the spi resource
+	//Acquire the spi resource
 	xSemaphoreTake(spi_mutex,portMAX_DELAY);
 	callBackFunctionPointer = callBackFunc;
 	spi_tranceive(transmit_buffer, buffer_length, receive_buffer);
@@ -29,6 +33,7 @@ void spi_freeRTOSTranceive(uint32_t  *transmit_buffer, uint8_t buffer_length, vo
 }
 
 void SPI_Handler(void) {
+	NVIC_DisableIRQ(SPI_IRQn);
 	long lHigherPriorityTaskWoken = pdFALSE;
 	SPI->SPI_SR; // MUST READ SR TO CLEAR NSSR
 	if (callBackFunctionPointer != NULL) {
@@ -37,10 +42,12 @@ void SPI_Handler(void) {
 	if (spi_handlerIsDoneSempahore != NULL) {
 		xSemaphoreGiveFromISR(spi_handlerIsDoneSempahore,&lHigherPriorityTaskWoken);
 	}
-	portEND_SWITCHING_ISR(lHigherPriorityTaskWoken);
 	SPI->SPI_CR = 1 << 1;
-	NVIC_DisableIRQ(SPI_IRQn);
+	SPI->SPI_PTCR |= 1 << 9;
+	SPI->SPI_PTCR |= 1 << 1;
 	
+	
+	portEND_SWITCHING_ISR(lHigherPriorityTaskWoken);
 }
 
 uint32_t spi_word(bool last_xfer,uint8_t chip_select, uint16_t data) {

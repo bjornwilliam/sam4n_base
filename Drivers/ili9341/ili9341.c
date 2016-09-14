@@ -25,11 +25,11 @@ static void ili9341_reset_display() {
 	pio_enableOutput(ILI9341_RESET_PIO, ILI9341_RESET_PIN);
 	
 	pio_setOutput(ILI9341_RESET_PIO, ILI9341_RESET_PIN, PIN_HIGH);
-	delay_ms(10);
+	vTaskDelay(10/portTICK_RATE_MS);
 	pio_setOutput(ILI9341_RESET_PIO, ILI9341_RESET_PIN, PIN_LOW);
-	delay_ms(10);
+	vTaskDelay(10/portTICK_RATE_MS);
 	pio_setOutput(ILI9341_RESET_PIO, ILI9341_RESET_PIN, PIN_HIGH);
-	delay_ms(150);
+	vTaskDelay(150/portTICK_RATE_MS);
 }
 
 static void ili9341_select_command_mode() {
@@ -56,13 +56,13 @@ static void ili9341_send_command(uint32_t command) {
 
 void ili9341_exit_standby() {
 	ili9341_send_command(ILI9341_CMD_SLEEP_OUT);
-	delay_ms(150);
+	vTaskDelay(150/portTICK_RATE_MS);
 	ili9341_send_command(ILI9341_CMD_DISPLAY_ON);
 }
 
 void ili9341_enter_standby() {
 	ili9341_send_command(ILI9341_CMD_DISPLAY_OFF);
-	delay_ms(150);
+	vTaskDelay(150/portTICK_RATE_MS);
 	ili9341_send_command(ILI9341_CMD_ENTER_SLEEP_MODE);
 }
 /**
@@ -132,12 +132,11 @@ void ili9341_init(void)
 		while (count-- > 0) {
 			dma_transmit_buffer[dma_index] = spi_word(false, ILI9341_CHIP_SELECT, (DATA_BIT |(*addr++)));
 			++dma_index;
-			//writedata8_cont(*addr++);
-			
+			//writedata8_cont(*addr++);		
 		}
 	}
 	ili9341_send_command(ILI9341_CMD_SLEEP_OUT);
-	delay_ms(150);
+	vTaskDelay(150/portTICK_RATE_MS);
 	ili9341_send_command(ILI9341_CMD_DISPLAY_ON);
 }
 
@@ -167,8 +166,8 @@ void ili9341_drawVLine(uint16_t x, uint16_t y, uint16_t h, uint16_t color) {
 	dma_transmit_buffer[current_index] = spi_word(false,ILI9341_CHIP_SELECT, ILI9341_CMD_MEMORY_WRITE);
 	while (h-- >= 1) {
 		current_index = current_index + 2;
-		dma_transmit_buffer[current_index-1] = spi_word(false,ILI9341_CHIP_SELECT, (DATA_BIT | (color >> 8)));
-		dma_transmit_buffer[current_index] = spi_word(false,ILI9341_CHIP_SELECT, (DATA_BIT | (color & 0xFF)));
+		dma_transmit_buffer[current_index-1]	= spi_word(false,ILI9341_CHIP_SELECT, (DATA_BIT | (color >> 8)));
+		dma_transmit_buffer[current_index]		= spi_word(false,ILI9341_CHIP_SELECT, (DATA_BIT | (color & 0xFF)));
 	}
 	spi_freeRTOSTranceive(dma_transmit_buffer, (current_index + 1), NULL, dma_receive_buffer);
 }
@@ -187,4 +186,15 @@ static uint32_t setAddress(uint32_t start_index, uint32_t *tbuffer, uint16_t x0,
 	tbuffer[start_index+9] = spi_word(false,ILI9341_CHIP_SELECT, (DATA_BIT | (y1 & 0xFF)));
 	
 	return (start_index + 10);
+}
+
+
+void ili9341_readManufactorID() {
+	dma_transmit_buffer[0] = spi_word(false,ILI9341_CHIP_SELECT, ILI9341_CMD_READ_DISP_ID);
+	//dma_transmit_buffer[0] = spi_word(false,ILI9341_CHIP_SELECT, 0x0B);
+	dma_transmit_buffer[1] = spi_word(false,ILI9341_CHIP_SELECT, (DATA_BIT | DUMMY_BYTE));
+	dma_transmit_buffer[2] = spi_word(false,ILI9341_CHIP_SELECT, (DATA_BIT | DUMMY_BYTE));
+	dma_transmit_buffer[3] = spi_word(false,ILI9341_CHIP_SELECT, (DATA_BIT | DUMMY_BYTE));
+	dma_transmit_buffer[4] = spi_word(false,ILI9341_CHIP_SELECT, (DATA_BIT | DUMMY_BYTE));
+	spi_freeRTOSTranceive(dma_transmit_buffer,5, NULL, dma_receive_buffer);
 }
